@@ -1,0 +1,36 @@
+extends layout
+
+block content
+  if tag
+    h1= 'Clips tagged as '
+      - var final_tag = tag.replace('-', ' ');
+      i= final_tag
+  else if hero_id
+    h1= 'Clips with a '
+      i= hero_name
+      img(class='hero', src='/images/heroes/' + hero_id + '.png', alt=hero_name, title=hero_name)
+  else
+    h1= 'All Clips'
+
+  table(class='allclips')
+    thead
+      tr
+        th
+          div DURATION
+        th
+          div HEROES
+        th
+          div TAGS
+        th
+          div DESCRIPTION
+    tbody
+      each clip in clips
+        tr(onclick='window.location="https://dota.taylorpetrick.com/clip/' + clip.clip + '"')
+          td= clip.duration
+          td
+            each hero in clip.heroes
+              img(class='hero', src='/images/heroes/' + hero[0] + '.png', alt=hero[1], title=hero[1])
+          td
+            each tag in clip.tags
+              span(class='tag')= tag
+          td= clip.description

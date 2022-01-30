@@ -1,0 +1,35 @@
+extends layout
+
+block content
+  h1
+    a(href='https://dota.taylorpetrick.com')= '< Back to All Clips'
+  table(class='clipinfo')
+    tr
+      th
+        div MATCH INFO
+      th
+        div DURATION
+      th
+        div HEROES
+      th
+        div TAGS
+    tr
+      td
+        a(href='https://www.opendota.com/matches/' + match, target='_blank')
+          img(class='external' src='/images/open_dota.png' alt='Open Dota', title='Open Dota')
+        a(href='https://www.dotabuff.com/matches/' + match, target='_blank')
+          img(class='external' src='/images/dotabuff.png' alt='Dotabuff', title='Dotabuff')
+      td= duration
+      td
+        each hero in heroes
+          a(href='http://dota.taylorpetrick.com/hero/' + hero[0])
+            img(class='hero', src='/images/heroes/' + hero[0] + '.png', alt=hero[1], title=hero[1])
+      td
+        each tag in tags
+          - var link_tag = tag.replace(' ', '-');
+          a(href='https://dota.taylorpetrick.com/tag/' + link_tag)
+            span(class='tag')= tag
+  div(class='video')
+    video(controls)
+      source(src='/videos/' + clip + '.mp4')
+  div(class='description')= description
