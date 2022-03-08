@@ -151,6 +151,7 @@ var tags = [
   'skill shot',
   'solo kill',
   'team fight',
+  'turbo',
   'tilted',
   'ultra kill',
 ];
