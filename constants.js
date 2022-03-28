@@ -121,6 +121,7 @@ var heroes = {
   119: 'Wraith King',
   120: 'Zeus',
   121: 'Marci',
+  122: 'Primal Beast',
 };
 
 var tags = [
@@ -129,6 +130,7 @@ var tags = [
   'bait',
   'base defense',
   'buyback',
+  'combo',
   'dodge',
   'farming',
   'final push',
@@ -138,6 +140,7 @@ var tags = [
   'high ground',
   'juking',
   'kiting',
+  'laning',
   'low hp',
   'mid lane',
   'misplay',
