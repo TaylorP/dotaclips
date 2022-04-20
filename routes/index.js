@@ -17,7 +17,7 @@ router.get('/', function(req, res, next) {
 
 /* GET a clip by id */
 router.get('/clip/:id', function(req, res, next) {
-  db.get_clips([req.params.id], function (info) {
+  db.get_clips([req.params.id], false, function (info) {
     if (!info || (info.length == 0)) {
       next();
     } else {

@@ -53,15 +53,20 @@ table {
 .clipinfo th div {
   padding: 0px 9px 2px 8px;
 }
-.allclips tbody tr:nth-child(odd) {
+.allclips tbody .plain:nth-child(odd) {
   background: #2f4254;
 }
-.allclips tbody tr:hover {
+.allclips tbody .plain:hover {
   background: #2980b9;
   cursor: pointer;
 }
-.allclips tbody tr:hover td .tag {
+.allclips tbody .plain:hover td .tag {
   background: #2980b9;
+}
+.allclips tbody .date_header {
+  background: #3e566d;
+  border-bottom: solid 1px #bdc3c7;
+  border-top: solid 1px #bdc3c7;
 }
 .allclips thead tr {
   background: #34495e;
@@ -106,6 +111,10 @@ td .external:hover {
 }
 td .matchid {
   margin-left: 5px;
+}
+td .date {
+  font-weight: bold;
+  font-size: 16px;
 }
 td .tag {
   background: #3e566d;

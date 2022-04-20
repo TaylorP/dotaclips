@@ -50,7 +50,7 @@ table
 
 .allclips
   tbody
-    tr
+    tr:.plain
       &:nth-child(odd)
         background: #2f4254
       &:hover
@@ -59,6 +59,10 @@ table
         td
           .tag
             background: #2980b9
+    tr:.date_header
+      background: #3e566d
+      border-bottom: solid 1px #bdc3c7
+      border-top: solid 1px #bdc3c7
   thead
     tr
       background: #34495e
@@ -102,6 +106,10 @@ td
 
   .matchid
     margin-left: 5px
+
+  .date
+    font-weight: bold
+    font-size: 16px
 
   .tag
     background: #3e566d

@@ -8,6 +8,8 @@ block content
       th
         div MATCH INFO
       th
+        div DATE
+      th
         div DURATION
       th
         div HEROES
@@ -19,6 +21,7 @@ block content
           img(class='external' src='/images/open_dota.png' alt='Open Dota', title='Open Dota')
         a(href='https://www.dotabuff.com/matches/' + match, target='_blank')
           img(class='external' src='/images/dotabuff.png' alt='Dotabuff', title='Dotabuff')
+      td= start_time
       td= duration
       td
         each hero in heroes

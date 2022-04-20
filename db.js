@@ -3,6 +3,7 @@ var crypto = require('crypto');
 var fs = require('fs');
 var ffmpeg = require('ffmpeg');
 var glob = require('glob');
+var https = require('https');
 var path = require('path');
 var redis = require('redis');
 
@@ -30,13 +31,18 @@ function clip_hash(match_id, extra_id) {
 }
 
 function clip_time(duration) {
-    var minutes = Math.floor(duration / 60);
-    var seconds = duration - minutes*60;
-    return String(minutes).padStart(2, '0') + ':' +
-        String(seconds).padStart(2, '0');
+  var minutes = Math.floor(duration / 60);
+  var seconds = duration - minutes*60;
+  return String(minutes).padStart(2, '0') + ':' +
+      String(seconds).padStart(2, '0');
 }
 
-function get_clips(clip_ids, callback) {
+function start_time(timestamp) {
+  var date = new Date(timestamp*1000);
+  return date.toDateString();
+}
+
+function get_clips(clip_ids, include_headers, callback) {
   var multi = __conn.multi();
 
   clip_ids.forEach(function (clip) {
@@ -62,6 +68,8 @@ function get_clips(clip_ids, callback) {
         match: replies[i].match_id,
         description: replies[i].description,
         duration: clip_time(replies[i].duration),
+        start_time: start_time(replies[i].start_time),
+        time_stamp: replies[i].start_time,
         heroes: hero_list(replies[i+1]),
         tags: replies[i+2].sort(),
       });
@@ -79,14 +87,36 @@ function get_clips(clip_ids, callback) {
       return 0;
     });
 
-    callback({clips: result});
+    var final_result = [];
+    var last_month = -1;
+
+    for (var i = 0; i < result.length; i++) {
+      if (include_headers) {
+        var date = new Date(result[i].time_stamp*1000);
+        if (date.getMonth() != last_month)
+        {
+          last_month = date.getMonth();
+          var month_name = date.toLocaleString('default', { month: 'short' });
+          var year = date.getFullYear();
+
+          final_result.push({
+            clip: 0,
+            start_time: `${month_name} ${year}`,
+          });
+        }
+      }
+
+      final_result.push(result[i]);
+    }
+
+    callback({clips: final_result});
   });
 }
 
 function get_all_clips(callback) {
   __conn.smembers(__all_clip_key, function (err, values) {
     if (err) throw err;
-    get_clips(values, callback);
+    get_clips(values, true, callback);
   });
 }
 
@@ -94,7 +124,7 @@ function get_tag_clips(tag, callback) {
   var inv_key = `${__tags_inv_key}${tag}`;
   __conn.smembers(inv_key, function (err, values) {
     if (err) throw err;
-    get_clips(values, callback);
+    get_clips(values, true, callback);
   });
 }
 
@@ -102,68 +132,101 @@ function get_hero_clips(hero, callback) {
   var inv_key = `${__heroes_inv_key}${hero}`;
   __conn.smembers(inv_key, function (err, values) {
     if (err) throw err;
-    get_clips(values, callback);
+    get_clips(values, true, callback);
   });
+}
+
+function get_match_time(match_id, callback) {
+  var options = {
+    hostname: 'api.opendota.com',
+    port: 443,
+    path: `/api/matches/${match_id}`,
+    method: 'GET',
+  };
+
+  var req = https.request(options, function (res) {
+    res.setEncoding('utf8');
+
+    var json_body = '';
+    res.on('data', function (chunk) {
+      json_body += chunk;
+    });
+
+    res.on('end', function () {
+      var json_data = JSON.parse(json_body);
+      callback(json_data.start_time);
+    });
+  });
+
+  req.on('error', function (e) {
+    console.log('Problem with OpenDota API request: ' + e.message);
+    callback(0);
+  });
+
+  req.end();
 }
 
 function add_clip(src_path, match_id, description, heroes, tags, callback) {
   __conn.incr(__counter_key, function (err, value) {
     if (err) throw err;
 
-    var hash = clip_hash(match_id, value);
-    console.log(`Adding clip with hash=${hash}`);
-    var dst_path = path.join(__dirname, 'public/videos/' + String(hash) + '.mp4');
+    get_match_time(match_id, function (start_time) {
+      var hash = clip_hash(match_id, value);
+      console.log(`Adding clip with hash=${hash}`);
+      var dst_path = path.join(__dirname, 'public/videos/' + String(hash) + '.mp4');
 
-    fs.copyFile(src_path, dst_path, fs.constants.COPYFILE_EXCL, function (err) {
-      if (err) throw err;
+      fs.copyFile(src_path, dst_path, fs.constants.COPYFILE_EXCL, function (err) {
+        if (err) throw err;
 
-      var proc = new ffmpeg(src_path);
-      proc.then(function (video) {
-        var duration = parseInt(video.metadata.duration.seconds);
-        var multi = __conn.multi();
+        var proc = new ffmpeg(src_path);
+        proc.then(function (video) {
+          var duration = parseInt(video.metadata.duration.seconds);
+          var multi = __conn.multi();
 
-        var hash_key = `${__clip_key}${hash}`;
-        var hero_key = `${__heroes_key}${hash}`;
-        var tag_key = `${__tags_key}${hash}`;
+          var hash_key = `${__clip_key}${hash}`;
+          var hero_key = `${__heroes_key}${hash}`;
+          var tag_key = `${__tags_key}${hash}`;
 
-        multi.del(hash_key);
-        multi.del(hero_key);
-        multi.del(tag_key);
+          multi.del(hash_key);
+          multi.del(hero_key);
+          multi.del(tag_key);
 
-        multi.hset(hash_key, "match_id", match_id);
-        multi.hset(hash_key, "description", description);
-        multi.hset(hash_key, "duration", duration);
-        multi.sadd(__all_clip_key, hash);
+          multi.hset(hash_key, "match_id", match_id);
+          multi.hset(hash_key, "description", description);
+          multi.hset(hash_key, "duration", duration);
+          multi.hset(hash_key, "start_time", start_time);
+          multi.sadd(__all_clip_key, hash);
 
-        var frame_name = path.basename(dst_path, 'mp4');
-        video.fnExtractFrameToJPG(
-          path.join(__dirname, 'public/video_frames/'), 
-          {
-            number: 1,
-            file_name: `${frame_name}`,
-            start_time: duration/2.0,
-          },
-          function (err, files) {
+          var frame_name = path.basename(dst_path, 'mp4');
+          video.fnExtractFrameToJPG(
+            path.join(__dirname, 'public/video_frames/'), 
+            {
+              number: 1,
+              file_name: `${frame_name}`,
+              start_time: duration/2.0,
+            },
+            function (err, files) {
+              if (err) throw err;
+            }
+          );
+
+          heroes.forEach(function (element) {
+            multi.rpush(hero_key, element);
+            var inv_key = `${__heroes_inv_key}${element}`;
+            multi.sadd(inv_key, hash);
+          });
+
+          tags.forEach(function (element) {
+            multi.rpush(tag_key, element);
+            var final_tag = element.replace(' ', '-');
+            var inv_key = `${__tags_inv_key}${final_tag}`;
+            multi.sadd(inv_key, hash);
+          });
+
+          multi.exec(function (err, replies) {
             if (err) throw err;
-          }
-        );
-
-        heroes.forEach(function (element) {
-          multi.rpush(hero_key, element);
-          var inv_key = `${__heroes_inv_key}${element}`;
-          multi.sadd(inv_key, hash);
-        });
-
-        tags.forEach(function (element) {
-          multi.rpush(tag_key, element);
-          var final_tag = element.replace(' ', '-');
-          var inv_key = `${__tags_inv_key}${final_tag}`;
-          multi.sadd(inv_key, hash);
-        });
-
-        multi.exec(function (err, replies) {
-          if (err) throw err;
-          callback(hash);
+            callback(hash);
+          });
         });
       });
     });
@@ -211,31 +274,24 @@ function load_pending() {
   });
 }
 
-function save_frame() {
-  var pending_pattern = path.join(__dirname, 'public/videos/2be9f74bc4a878424cd18ba34a0ae5fc.mp4');
-  glob(pending_pattern, async function (err, files) {
-    for (var i = 0; i < files.length; i++) {
-      var file_path = files[i];
-      var file_name = path.basename(file_path, 'mp4');
-      console.log(`Loading ${file_path}`);
-      var proc = new ffmpeg(file_path);
-      await proc.then(function (video) {
-        console.log(`Loaded ${file_path}`);
-        var duration = parseInt(video.metadata.duration.seconds);
-        video.fnExtractFrameToJPG(
-        path.join(__dirname, 'public/video_frames/'), 
-          {
-            number: 1,
-            file_name: `${file_name}`,
-            start_time: duration/2.0,
-          },
-          function (err, files) {
-            if (err) throw err;
+function update_times() {
+  __conn.smembers(__all_clip_key, function (err, values) {
+    if (err) throw err;
+    values.forEach(function (clip) {
+      var hash_key = `${__clip_key}${clip}`;
+      __conn.hgetall(hash_key, function (err, values) {
+        if (values.start_time)
+          return;
+        console.log(`Fetching time for ${values.match_id}`);
+        setTimeout(function () {
+          get_match_time(values.match_id, function (start_time) {
+            __conn.hset(hash_key, "start_time", start_time, function (err) {
+              console.log(`Set time for ${hash_key} ${start_time}`);
+            });
           });
-      }).catch(function (err) {
-        console.log(err);
+        }, 1500);
       });
-    }
+    });
   });
 }
 
